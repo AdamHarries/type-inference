@@ -1,4 +1,4 @@
-use super::ctxmember::*;
+use super::*;
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct Context(pub Vec<CtxMember>);
@@ -206,11 +206,81 @@ impl Context {
         let (b, c) = ctx_p.hole(m2)?;
         Some((a, b, c))
     }
-
+    /// Filter this context for members that match the predicate P
     pub fn filter<P>(&self, p: P) -> Vec<CtxMember>
     where
         P: FnMut(&&CtxMember) -> bool,
     {
         self.0.iter().filter(p).cloned().collect::<Vec<CtxMember>>()
+    }
+    /// Search this context for an assumption with this variable, and return
+    /// the type of the assumption.
+    pub fn has_assumption(&self, e: &EVar) -> Option<Type> {
+        let assumptions = self.filter(|m| match m {
+            CtxMember::Assump(e2, _) => e2 == e,
+            _ => false,
+        });
+        match assumptions.len() {
+            0 => None,
+            1 => assumptions[0].clone().get_type(),
+            _ => panic!(
+                "ctxSolution: internal error - multiple types for variable: {:?}",
+                assumptions
+            ),
+        }
+    }
+    /// Search this context for a solution with this variable, and return the
+    /// type of the solution.
+    pub fn has_solution(&self, e: &TEVar) -> Option<Type> {
+        let solutions = self.filter(|m| match m {
+            CtxMember::Solved(e2, _) => e2 == e,
+            _ => false,
+        });
+        match solutions.len() {
+            0 => None,
+            1 => solutions[0].clone().get_type(),
+            _ => panic!(
+            "ctxSolution: internal error - multiple types for variable: {:?}",
+            solutions
+        ),
+        }
+    }
+    /// Figure 7 - "Well formedness of types and contexwts in the algorithmic system"
+    /// Part one: "Under context Gamma, type A is well formed"
+    /// Checks if a type `a` is well formed under context `ctx`
+    pub fn is_type_well_formed(&self, a: Type) -> bool {
+        match a {
+            Type::Unit => true,
+            Type::Var(v) => self.elem(&ctx_var!(v.clone())),
+            Type::EVar(v) => {
+                self.elem(&ctx_evar!(&v)) || self.has_solution(&v).is_some()
+            }
+            Type::Arr(x, y) => {
+                self.is_type_well_formed(*x) && self.is_type_well_formed(*y)
+            }
+            Type::All(v, t) => {
+                let new_ctx = self.clone().add(ctx_var!(v));
+                new_ctx.is_type_well_formed(*t)
+            }
+        }
+    }
+    /// Figure 8 - "Applying a context, as a substitution, to a type"
+    pub fn apply_context(&self, a: Type) -> Type {
+        match a {
+            Type::Unit => Type::Unit,
+            v @ Type::Var(_) => v,
+            Type::EVar(ref alpha) => {
+                if let Some(tau) = self.has_solution(&alpha) {
+                    self.apply_context(tau.clone())
+                } else {
+                    a
+                }
+            }
+            Type::Arr(a, b) => {
+                ty_arr!(self.apply_context(*a), self.apply_context(*b))
+            }
+            Type::All(v, t) => ty_all!(v, self.apply_context(*t)),
+            _ => Type::Unit,
+        }
     }
 }
