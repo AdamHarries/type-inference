@@ -206,6 +206,7 @@ impl Context {
         let (b, c) = ctx_p.hole(m2)?;
         Some((a, b, c))
     }
+
     /// Filter this context for members that match the predicate P
     pub fn filter<P>(&self, p: P) -> Vec<CtxMember>
     where

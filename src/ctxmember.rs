@@ -85,6 +85,8 @@ macro_rules! ctx_marker {
 }
 
 impl CtxMember {
+    /// get the type of a context member, if that context member has an associated type. 
+    /// convenience function to avoid pattern matching on members whenever we need a type. 
     pub fn get_type(self) -> Option<Type> {
         match self {
             CtxMember::Assump(_, t) => Some(t),
